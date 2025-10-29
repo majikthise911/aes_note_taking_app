@@ -55,7 +55,7 @@ BACKUP_DIR.mkdir(exist_ok=True)
 # API configuration
 XAI_API_KEY = get_secret("XAI_API_KEY", "")
 XAI_API_URL = get_secret("XAI_API_URL", "https://api.x.ai/v1/chat/completions")
-XAI_MODEL = get_secret("XAI_MODEL", "grok-beta")
+XAI_MODEL = get_secret("XAI_MODEL", "grok-4-fast-reasoning")
 
 # API retry configuration
 API_MAX_RETRIES = 3

@@ -45,7 +45,7 @@ Prepare these secrets for Streamlit Cloud:
 ```toml
 XAI_API_KEY = "your_actual_api_key"
 XAI_API_URL = "https://api.x.ai/v1/chat/completions"
-XAI_MODEL = "grok-beta"
+XAI_MODEL = "grok-4-fast-reasoning"
 AUTH_ENABLED = "False"
 LOG_LEVEL = "INFO"
 ```

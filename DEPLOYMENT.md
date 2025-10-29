@@ -52,7 +52,7 @@ In the Advanced settings, add your secrets in the **Secrets** section:
 # Streamlit secrets format
 XAI_API_KEY = "your_actual_xai_api_key_here"
 XAI_API_URL = "https://api.x.ai/v1/chat/completions"
-XAI_MODEL = "grok-beta"
+XAI_MODEL = "grok-4-fast-reasoning"
 
 # Authentication (optional)
 AUTH_ENABLED = "False"
@@ -146,7 +146,7 @@ LOG_LEVEL = "INFO"
 |----------|----------|---------|-------------|
 | `XAI_API_KEY` | ✅ Yes | - | Your xAI API key |
 | `XAI_API_URL` | No | `https://api.x.ai/v1/chat/completions` | xAI API endpoint |
-| `XAI_MODEL` | No | `grok-beta` | xAI model to use |
+| `XAI_MODEL` | No | `grok-4-fast-reasoning` | xAI model to use |
 | `AUTH_ENABLED` | No | `False` | Enable authentication |
 | `ADMIN_USERNAME` | No | `admin` | Admin username (if auth enabled) |
 | `ADMIN_PASSWORD` | No | `changeme` | Admin password (if auth enabled) |
