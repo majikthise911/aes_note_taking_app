@@ -15,7 +15,8 @@ from config.settings import (
     API_RETRY_DELAYS,
     API_TIMEOUT,
 )
-from config.categories import get_categories_list
+from config.categories import get_categories_list, validate_category
+from utils.logger import logger
 
 
 class XAIClient:
@@ -163,13 +164,21 @@ If multiple distinct notes are provided, return multiple JSON objects in the arr
             if isinstance(parsed, dict):
                 parsed = [parsed]
 
-            # Validate each note has required fields
+            # Validate each note has required fields and valid category
             for note in parsed:
                 if not all(
                     key in note
                     for key in ["cleaned_text", "category", "date", "timestamp"]
                 ):
                     raise ValueError("Missing required fields in API response")
+
+                # Validate category and default to "General" if invalid
+                if not validate_category(note["category"]):
+                    logger.warning(
+                        f"Invalid category '{note['category']}' returned by API. "
+                        f"Defaulting to 'General'."
+                    )
+                    note["category"] = "General"
 
             return parsed
 

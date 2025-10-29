@@ -230,24 +230,45 @@ class DatabaseManager:
             rows = cursor.fetchall()
             return [Note.from_db_row(row) for row in rows]
 
-    def get_pending_notes(self) -> List[Note]:
+    def get_pending_notes(
+        self, page: Optional[int] = None, per_page: int = 50
+    ) -> Tuple[List[Note], int]:
         """
-        Get all pending notes awaiting approval.
+        Get pending notes awaiting approval.
+
+        Args:
+            page: Page number (1-indexed), None for all notes
+            per_page: Notes per page (only used if page is provided)
 
         Returns:
-            List of Note instances
+            Tuple of (list of Note instances, total count)
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+
+            # Get total count
             cursor.execute(
-                """
+                "SELECT COUNT(*) FROM notes WHERE approval_status = 'pending'"
+            )
+            total_count = cursor.fetchone()[0]
+
+            # Build query with optional pagination
+            query = """
                 SELECT * FROM notes
                 WHERE approval_status = 'pending'
                 ORDER BY created_at DESC
-                """
-            )
+            """
+
+            if page is not None:
+                offset = (page - 1) * per_page
+                query += " LIMIT ? OFFSET ?"
+                cursor.execute(query, (per_page, offset))
+            else:
+                cursor.execute(query)
+
             rows = cursor.fetchall()
-            return [Note.from_db_row(row) for row in rows]
+            notes = [Note.from_db_row(row) for row in rows]
+            return notes, total_count
 
     def delete_note(self, note_id: int) -> bool:
         """

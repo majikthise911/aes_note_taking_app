@@ -275,12 +275,14 @@ cp data/backups/notes_backup_YYYYMMDD_HHMMSS.db data/notes.db
 
 ### Streamlit Cloud
 
+**Quick Deploy:**
 1. Push code to GitHub
 2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Connect your repository
-4. Add secrets in Streamlit Cloud dashboard:
-   - `XAI_API_KEY`
-   - Other environment variables from `.env`
+3. Connect your repository and select `app.py`
+4. Add your `XAI_API_KEY` in the Secrets section
+5. Deploy!
+
+**📖 Full Deployment Guide:** See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete instructions, troubleshooting, and best practices.
 
 ### Local Production
 

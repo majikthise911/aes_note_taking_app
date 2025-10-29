@@ -7,6 +7,7 @@ from typing import Optional
 from database.db_manager import DatabaseManager
 from database.models import Note
 from config.categories import get_categories_list
+from config.settings import NOTES_PER_PAGE
 from utils.logger import logger, log_user_action
 
 
@@ -21,18 +22,39 @@ def render_approval_view(db_manager: DatabaseManager, username: str):
     st.header("✅ Approve Notes")
     st.markdown("Review notes processed by AI and approve, edit, or reject them.")
 
-    # Get pending notes
-    pending_notes = db_manager.get_pending_notes()
+    # Pagination setup
+    if "approval_page" not in st.session_state:
+        st.session_state.approval_page = 1
 
-    if not pending_notes:
-        st.info("🎉 No notes pending approval! All caught up.")
-        return
+    # Get pending notes with pagination
+    try:
+        pending_notes, total_count = db_manager.get_pending_notes(
+            page=st.session_state.approval_page,
+            per_page=NOTES_PER_PAGE,
+        )
 
-    st.write(f"**{len(pending_notes)} note(s) pending approval**")
+        if total_count == 0:
+            st.info("🎉 No notes pending approval! All caught up.")
+            return
 
-    # Display each pending note
-    for i, note in enumerate(pending_notes):
-        render_note_approval_card(db_manager, note, i, username)
+        # Display count and page info
+        total_pages = (total_count + NOTES_PER_PAGE - 1) // NOTES_PER_PAGE
+        st.write(
+            f"**{total_count} note(s) pending approval** "
+            f"(Page {st.session_state.approval_page} of {total_pages})"
+        )
+
+        # Display each pending note on current page
+        for i, note in enumerate(pending_notes):
+            render_note_approval_card(db_manager, note, i, username)
+
+        # Pagination controls
+        if total_pages > 1:
+            render_pagination_controls(total_count, NOTES_PER_PAGE)
+
+    except Exception as e:
+        st.error(f"Failed to load pending notes: {e}")
+        logger.error(f"Approval view error: {e}", exc_info=True)
 
 
 def render_note_approval_card(
@@ -78,11 +100,20 @@ def render_note_approval_card(
 
         with col3:
             categories = get_categories_list()
-            current_category_index = (
-                categories.index(note.category)
-                if note.category in categories
-                else 0
-            )
+            # Safely get category index, default to "General" (index 0) if invalid
+            try:
+                current_category_index = (
+                    categories.index(note.category)
+                    if note.category and note.category in categories
+                    else 0
+                )
+            except ValueError:
+                logger.warning(
+                    f"Note #{note.id} has invalid category '{note.category}'. "
+                    f"Defaulting to 'General'."
+                )
+                current_category_index = 0
+
             selected_category = st.selectbox(
                 "Category:",
                 options=categories,
@@ -222,3 +253,55 @@ def delete_note(db_manager: DatabaseManager, note_id: int, username: str):
     except Exception as e:
         st.error(f"Error deleting note: {e}")
         logger.error(f"Deletion error: {e}", exc_info=True)
+
+
+def render_pagination_controls(total_count: int, per_page: int):
+    """
+    Render pagination controls for approval view.
+
+    Args:
+        total_count: Total number of items
+        per_page: Items per page
+    """
+    total_pages = (total_count + per_page - 1) // per_page
+    current_page = st.session_state.get("approval_page", 1)
+
+    if total_pages <= 1:
+        return
+
+    st.markdown("---")
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+
+    with col1:
+        if st.button(
+            "⏮️ First", disabled=(current_page == 1), key="approval_first"
+        ):
+            st.session_state.approval_page = 1
+            st.rerun()
+
+    with col2:
+        if st.button(
+            "◀️ Prev", disabled=(current_page == 1), key="approval_prev"
+        ):
+            st.session_state.approval_page = max(1, current_page - 1)
+            st.rerun()
+
+    with col3:
+        st.markdown(
+            f"<div style='text-align: center; padding-top: 5px;'>Page {current_page} of {total_pages}</div>",
+            unsafe_allow_html=True,
+        )
+
+    with col4:
+        if st.button(
+            "Next ▶️", disabled=(current_page >= total_pages), key="approval_next"
+        ):
+            st.session_state.approval_page = min(total_pages, current_page + 1)
+            st.rerun()
+
+    with col5:
+        if st.button(
+            "Last ⏭️", disabled=(current_page >= total_pages), key="approval_last"
+        ):
+            st.session_state.approval_page = total_pages
+            st.rerun()
