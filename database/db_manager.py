@@ -42,11 +42,12 @@ class DatabaseManager:
             notes_table_exists = cursor.fetchone() is not None
 
             if notes_table_exists:
-                # Check if project_id column exists
+                # Check if columns need to be added
                 cursor.execute("PRAGMA table_info(notes)")
                 columns = [col[1] for col in cursor.fetchall()]
+
+                # Add project_id if missing
                 if 'project_id' not in columns:
-                    # Migrate existing notes table
                     cursor.execute("ALTER TABLE notes ADD COLUMN project_id INTEGER")
 
                     # Create a default project for migration
@@ -61,6 +62,16 @@ class DatabaseManager:
                     # Assign all existing notes to the default project
                     cursor.execute("UPDATE notes SET project_id = ? WHERE project_id IS NULL", (default_project_id,))
                     logger.info(f"Migrated existing notes to Default Project (ID: {default_project_id})")
+
+                # Add confidence_score if missing
+                if 'confidence_score' not in columns:
+                    cursor.execute("ALTER TABLE notes ADD COLUMN confidence_score REAL")
+                    logger.info("Added confidence_score column")
+
+                # Add clarifying_question if missing
+                if 'clarifying_question' not in columns:
+                    cursor.execute("ALTER TABLE notes ADD COLUMN clarifying_question TEXT")
+                    logger.info("Added clarifying_question column")
 
             cursor.executescript(NOTES_TABLE_SCHEMA)
             cursor.executescript(LOGS_TABLE_SCHEMA)
@@ -174,6 +185,8 @@ class DatabaseManager:
         date: Optional[str] = None,
         timestamp: Optional[str] = None,
         approval_status: str = "pending",
+        confidence_score: Optional[float] = None,
+        clarifying_question: Optional[str] = None,
     ) -> int:
         """
         Insert a new note into the database.
@@ -186,6 +199,8 @@ class DatabaseManager:
             date: Note date (YYYY-MM-DD)
             timestamp: Note time (HH:MM:SS)
             approval_status: Approval status
+            confidence_score: AI confidence in categorization (0.0-1.0)
+            clarifying_question: Optional question to improve categorization
 
         Returns:
             ID of inserted note
@@ -194,10 +209,12 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO notes (raw_text, project_id, cleaned_text, category, date, timestamp, approval_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO notes (raw_text, project_id, cleaned_text, category, date, timestamp,
+                                   approval_status, confidence_score, clarifying_question)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (raw_text, project_id, cleaned_text, category, date, timestamp, approval_status),
+                (raw_text, project_id, cleaned_text, category, date, timestamp,
+                 approval_status, confidence_score, clarifying_question),
             )
             conn.commit()
             return cursor.lastrowid

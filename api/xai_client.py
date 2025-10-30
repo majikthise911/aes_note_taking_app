@@ -59,7 +59,9 @@ class XAIClient:
 2. Categorize each note under ONE of the predefined categories
 3. Preserve the original meaning and technical details
 4. Format the cleaned text with proper bullet points and structure
-5. Return valid JSON format
+5. Assign a confidence score (0.0-1.0) for your categorization
+6. Generate a clarifying question if confidence is below 0.8
+7. Return valid JSON format
 
 Predefined categories: {categories_str}
 
@@ -79,11 +81,25 @@ Example of good formatting:
   - Related detail
   - Additional information"
 
+CONFIDENCE SCORE GUIDELINES:
+- 0.9-1.0: Very confident - clear categorization, unambiguous content
+- 0.7-0.89: Confident - good categorization, minor ambiguity
+- 0.5-0.69: Uncertain - could fit multiple categories
+- 0.0-0.49: Low confidence - unclear or spans multiple domains
+
+CLARIFYING QUESTIONS:
+- Only provide if confidence < 0.8
+- Ask specific multiple-choice questions to clarify categorization
+- Format: "This note mentions [X] and [Y]. Which aspect is more important: A) [X focus] B) [Y focus]?"
+- Keep questions concise and actionable
+
 Return format (JSON array):
 [
   {{
     "cleaned_text": "Properly formatted note with bullet points and structure",
     "category": "Category Name",
+    "confidence_score": 0.85,
+    "clarifying_question": "Optional question if confidence < 0.8, otherwise null",
     "date": "{datetime.now().strftime('%Y-%m-%d')}",
     "timestamp": "{datetime.now().strftime('%H:%M:%S')}"
   }}
@@ -183,11 +199,25 @@ If multiple distinct notes are provided, return multiple JSON objects in the arr
 
             # Validate each note has required fields and valid category
             for note in parsed:
-                if not all(
-                    key in note
-                    for key in ["cleaned_text", "category", "date", "timestamp"]
-                ):
+                # Check required fields
+                required_fields = ["cleaned_text", "category", "date", "timestamp"]
+                if not all(key in note for key in required_fields):
                     raise ValueError("Missing required fields in API response")
+
+                # Validate and set defaults for optional fields
+                if "confidence_score" not in note or note["confidence_score"] is None:
+                    note["confidence_score"] = 0.75  # Default moderate confidence
+
+                if "clarifying_question" not in note:
+                    note["clarifying_question"] = None
+
+                # Ensure confidence_score is a float between 0 and 1
+                try:
+                    note["confidence_score"] = float(note["confidence_score"])
+                    note["confidence_score"] = max(0.0, min(1.0, note["confidence_score"]))
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid confidence score, defaulting to 0.75")
+                    note["confidence_score"] = 0.75
 
                 # Validate category and default to "General" if invalid
                 if not validate_category(note["category"]):

@@ -72,7 +72,24 @@ def render_note_approval_card(
         username: Current username
     """
     with st.container():
-        st.markdown(f"### Note #{note.id}")
+        # Header with confidence indicator
+        col_header, col_confidence = st.columns([3, 1])
+        with col_header:
+            st.markdown(f"### Note #{note.id}")
+        with col_confidence:
+            if note.confidence_score is not None:
+                confidence_pct = int(note.confidence_score * 100)
+                if note.confidence_score >= 0.8:
+                    st.success(f"🎯 Confidence: {confidence_pct}%")
+                elif note.confidence_score >= 0.6:
+                    st.warning(f"⚠️ Confidence: {confidence_pct}%")
+                else:
+                    st.error(f"❓ Confidence: {confidence_pct}%")
+
+        # Show clarifying question if confidence is low
+        if note.clarifying_question and note.confidence_score and note.confidence_score < 0.8:
+            st.info(f"**💭 Clarifying Question:** {note.clarifying_question}")
+            st.caption("Please review the categorization carefully or adjust it below.")
 
         # Show comparison
         col1, col2 = st.columns(2)

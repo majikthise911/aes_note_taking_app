@@ -101,9 +101,11 @@ def process_with_api(
                         date=note["date"],
                         timestamp=note["timestamp"],
                         approval_status="pending",
+                        confidence_score=note.get("confidence_score"),
+                        clarifying_question=note.get("clarifying_question"),
                     )
                     saved_count += 1
-                    logger.info(f"Note {note_id} created and pending approval")
+                    logger.info(f"Note {note_id} created with confidence {note.get('confidence_score', 'N/A')}")
 
                 except Exception as e:
                     logger.error(f"Failed to save note: {e}")

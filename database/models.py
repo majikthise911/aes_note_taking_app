@@ -53,6 +53,8 @@ class Note:
         date: Note date (YYYY-MM-DD)
         timestamp: Note time (HH:MM:SS)
         approval_status: One of 'pending', 'approved', 'rejected'
+        confidence_score: AI confidence in categorization (0.0-1.0)
+        clarifying_question: Optional question to improve categorization
         created_at: Database creation timestamp
     """
 
@@ -64,6 +66,8 @@ class Note:
     date: Optional[str] = None
     timestamp: Optional[str] = None
     approval_status: str = "pending"
+    confidence_score: Optional[float] = None
+    clarifying_question: Optional[str] = None
     created_at: Optional[str] = None
 
     @classmethod
@@ -77,17 +81,36 @@ class Note:
         Returns:
             Note instance
         """
-        return cls(
-            id=row[0],
-            project_id=row[1],
-            raw_text=row[2],
-            cleaned_text=row[3],
-            category=row[4],
-            date=row[5],
-            timestamp=row[6],
-            approval_status=row[7],
-            created_at=row[8],
-        )
+        # Handle both old and new schema
+        if len(row) >= 11:
+            return cls(
+                id=row[0],
+                project_id=row[1],
+                raw_text=row[2],
+                cleaned_text=row[3],
+                category=row[4],
+                date=row[5],
+                timestamp=row[6],
+                approval_status=row[7],
+                confidence_score=row[8],
+                clarifying_question=row[9],
+                created_at=row[10],
+            )
+        else:
+            # Old schema without confidence fields
+            return cls(
+                id=row[0],
+                project_id=row[1],
+                raw_text=row[2],
+                cleaned_text=row[3],
+                category=row[4],
+                date=row[5],
+                timestamp=row[6],
+                approval_status=row[7],
+                confidence_score=None,
+                clarifying_question=None,
+                created_at=row[8] if len(row) > 8 else None,
+            )
 
 
 @dataclass
@@ -153,6 +176,8 @@ CREATE TABLE IF NOT EXISTS notes (
     date TEXT,
     timestamp TEXT,
     approval_status TEXT CHECK(approval_status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
+    confidence_score REAL,
+    clarifying_question TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
@@ -161,6 +186,7 @@ CREATE INDEX IF NOT EXISTS idx_project_id ON notes(project_id);
 CREATE INDEX IF NOT EXISTS idx_date ON notes(date);
 CREATE INDEX IF NOT EXISTS idx_category ON notes(category);
 CREATE INDEX IF NOT EXISTS idx_approval_status ON notes(approval_status);
+CREATE INDEX IF NOT EXISTS idx_confidence_score ON notes(confidence_score);
 """
 
 LOGS_TABLE_SCHEMA = """
