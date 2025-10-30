@@ -15,6 +15,7 @@ from ui.input_view import render_input_view
 from ui.approval_view import render_approval_view
 from ui.daily_view import render_daily_view
 from ui.categorized_view import render_categorized_view
+from ui.rejected_view import render_rejected_view
 
 
 # Page configuration
@@ -193,7 +194,7 @@ def main():
             return
 
         # Main content area with tabs
-        tabs = st.tabs(["📝 New Note", "✅ Approve Notes", "📅 Daily View", "🗂️ By Category"])
+        tabs = st.tabs(["📝 New Note", "✅ Approve Notes", "📅 Daily View", "🗂️ By Category", "🗑️ Rejected"])
 
         with tabs[0]:
             render_input_view(
@@ -219,6 +220,13 @@ def main():
         with tabs[3]:
             render_categorized_view(
                 st.session_state.db_manager,
+                st.session_state.current_project_id,
+            )
+
+        with tabs[4]:
+            render_rejected_view(
+                st.session_state.db_manager,
+                st.session_state.current_user,
                 st.session_state.current_project_id,
             )
 

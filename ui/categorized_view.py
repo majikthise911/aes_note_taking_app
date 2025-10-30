@@ -10,6 +10,7 @@ from database.db_manager import DatabaseManager
 from config.categories import get_categories_list
 from config.settings import NOTES_PER_PAGE
 from utils.logger import logger
+import re
 
 
 def render_categorized_view(db_manager: DatabaseManager, project_id: int):
@@ -22,6 +23,16 @@ def render_categorized_view(db_manager: DatabaseManager, project_id: int):
     """
     st.header("🗂️ View by Category")
     st.markdown("Browse notes organized by project categories.")
+
+    # Special view toggle for action items
+    show_action_items_grouped = st.toggle(
+        "📋 Show Action Items Grouped by Technical Category",
+        help="Groups action items by their related technical domain (Engineering, Budget, Schedule, etc.)"
+    )
+
+    if show_action_items_grouped:
+        render_action_items_grouped_view(db_manager, project_id)
+        return
 
     # Filters
     col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
@@ -174,6 +185,94 @@ def render_table_view(notes: list):
             file_name=f"notes_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
+
+
+def render_action_items_grouped_view(db_manager: DatabaseManager, project_id: int):
+    """
+    Render action items grouped by their related technical category.
+
+    Args:
+        db_manager: Database manager instance
+        project_id: Current project ID
+    """
+    st.subheader("📋 Action Items by Technical Category")
+    st.markdown("Action items organized by their related technical domain.")
+
+    try:
+        # Get all action items
+        action_items = db_manager.get_notes_by_category(
+            category="Action Items",
+            approval_status="approved",
+            project_id=project_id
+        )
+
+        if not action_items:
+            st.info("No approved action items found.")
+            return
+
+        # Category keywords for classification
+        category_keywords = {
+            "Engineering": ["engineer", "structural", "design", "technical", "civil", "electrical"],
+            "Schedule": ["schedule", "timeline", "deadline", "meeting", "date", "week", "month"],
+            "Budget & Pricing": ["budget", "cost", "pricing", "dollar", "$", "price", "payment"],
+            "Contracting": ["contract", "vendor", "supplier", "agreement", "procurement"],
+            "Environmental": ["environmental", "biological", "cultural", "permitting", "epa"],
+            "Interconnection": ["interconnection", "utility", "grid", "substation"],
+            "Land": ["land", "property", "parcel", "lease", "easement"],
+            "Geotech": ["geotech", "soil", "foundation", "boring"],
+            "General": []  # Catch-all
+        }
+
+        # Categorize action items by keywords
+        grouped_items = {cat: [] for cat in category_keywords.keys()}
+
+        for note in action_items:
+            text = (note.cleaned_text or note.raw_text).lower()
+            matched = False
+
+            # Check each category's keywords
+            for category, keywords in category_keywords.items():
+                if category == "General":
+                    continue
+                if any(keyword in text for keyword in keywords):
+                    grouped_items[category].append(note)
+                    matched = True
+                    break
+
+            # If no match, add to General
+            if not matched:
+                grouped_items["General"].append(note)
+
+        # Display grouped action items
+        st.write(f"**Total Action Items:** {len(action_items)}")
+        st.markdown("---")
+
+        for category, items in grouped_items.items():
+            if not items:
+                continue
+
+            with st.expander(f"**{category}** ({len(items)} action items)", expanded=True):
+                for note in items:
+                    col1, col2 = st.columns([5, 1])
+
+                    with col1:
+                        st.markdown(f"**{note.date} {note.timestamp}**")
+                        st.write(note.cleaned_text or note.raw_text)
+
+                        # Highlight assignee if found
+                        text = note.cleaned_text or note.raw_text
+                        assignees = re.findall(r'(AES|Pre|JC|[A-Z][a-z]+ [A-Z][a-z]+)\s+(?:to|needs to|must)', text)
+                        if assignees:
+                            st.caption(f"👤 Assigned to: {', '.join(set(assignees))}")
+
+                    with col2:
+                        st.caption(f"Note #{note.id}")
+
+                    st.markdown("---")
+
+    except Exception as e:
+        st.error(f"Failed to load grouped action items: {e}")
+        logger.error(f"Grouped action items error: {e}", exc_info=True)
 
 
 def render_pagination_controls(total_count: int, per_page: int):

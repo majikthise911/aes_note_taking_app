@@ -65,6 +65,28 @@ class XAIClient:
 
 Predefined categories: {categories_str}
 
+CRITICAL: "Action Items" Category Rules
+The "Action Items" category is ONLY for discrete, assignable tasks with clear ownership. Use this category ONLY when the note contains:
+✅ Specific assignee/owner (e.g., "AES to", "Pre to", "JC to", "John needs to", "Team must")
+✅ Clear action verb (schedule, complete, submit, review, send, follow up, etc.)
+✅ Definite task or deliverable
+
+Examples of Action Items:
+- "AES to schedule meeting with engineering team by EOW"
+- "Pre to submit revised drawings by Friday"
+- "JC needs to follow up with vendor on pricing"
+- "Need to schedule site visit with structural engineer"
+- "Team must complete geotech report by Q3"
+
+Examples that are NOT Action Items (use appropriate category instead):
+- "Discussed engineering timelines" → Schedule or Engineering
+- "Budget looks tight" → Pricing or Risk Register
+- "Meeting scheduled for next week" → Schedule or relevant technical category
+- "Review needed for structural design" → Structural (unless it says WHO needs to review)
+- "Vendor submitted pricing" → Pricing or Contracting
+
+If a note is general information, status updates, or observations without a specific assigned task, use the appropriate technical category (Schedule, Pricing, Engineering, etc.) NOT "Action Items".
+
 FORMATTING REQUIREMENTS:
 - Organize information into clear bullet points using "•" or "-"
 - Group related information under topic headings when appropriate

@@ -88,8 +88,20 @@ def render_note_approval_card(
 
         # Show clarifying question if confidence is low
         if note.clarifying_question and note.confidence_score and note.confidence_score < 0.8:
-            st.info(f"**💭 Clarifying Question:** {note.clarifying_question}")
-            st.caption("Please review the categorization carefully or adjust it below.")
+            with st.expander("💭 **Answer Clarifying Question** (Optional)", expanded=True):
+                st.markdown(f"**Question:** {note.clarifying_question}")
+
+                # Parse question to extract options (if formatted as A) B) C))
+                question_text = note.clarifying_question
+                if "A)" in question_text and "B)" in question_text:
+                    st.caption("Based on your answer, you may want to adjust the category below.")
+
+                    # Show hint based on question
+                    if note.confidence_score < 0.6:
+                        st.warning("⚠️ Low confidence - please review the suggested category carefully.")
+                else:
+                    st.info(f"{question_text}")
+                    st.caption("Please review the categorization carefully or adjust it below.")
 
         # Show comparison
         col1, col2 = st.columns(2)
