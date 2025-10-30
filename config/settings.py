@@ -28,10 +28,13 @@ def get_secret(key: str, default: str = "") -> str:
         Secret value
     """
     # Try Streamlit secrets first (for cloud deployment)
-    if _has_streamlit and hasattr(st, "secrets"):
+    if _has_streamlit:
         try:
-            return st.secrets.get(key, os.getenv(key, default))
-        except (FileNotFoundError, KeyError):
+            if hasattr(st, "secrets") and hasattr(st.secrets, "get"):
+                return st.secrets.get(key, os.getenv(key, default))
+        except (FileNotFoundError, KeyError, RuntimeError, AttributeError):
+            # RuntimeError can occur if secrets.toml doesn't exist
+            # AttributeError can occur if secrets isn't properly initialized
             pass
 
     # Fall back to environment variables (for local development)

@@ -7,12 +7,46 @@ from typing import Optional
 
 
 @dataclass
+class Project:
+    """
+    Represents a project.
+
+    Attributes:
+        id: Unique identifier
+        name: Project name
+        created_at: Database creation timestamp
+    """
+
+    id: Optional[int] = None
+    name: str = ""
+    created_at: Optional[str] = None
+
+    @classmethod
+    def from_db_row(cls, row: tuple) -> "Project":
+        """
+        Create Project instance from database row.
+
+        Args:
+            row: Database row tuple
+
+        Returns:
+            Project instance
+        """
+        return cls(
+            id=row[0],
+            name=row[1],
+            created_at=row[2],
+        )
+
+
+@dataclass
 class Note:
     """
     Represents a project note.
 
     Attributes:
         id: Unique identifier
+        project_id: Associated project ID
         raw_text: Original user input
         cleaned_text: GPT-processed text
         category: Assigned category
@@ -23,6 +57,7 @@ class Note:
     """
 
     id: Optional[int] = None
+    project_id: Optional[int] = None
     raw_text: str = ""
     cleaned_text: Optional[str] = None
     category: Optional[str] = None
@@ -44,13 +79,14 @@ class Note:
         """
         return cls(
             id=row[0],
-            raw_text=row[1],
-            cleaned_text=row[2],
-            category=row[3],
-            date=row[4],
-            timestamp=row[5],
-            approval_status=row[6],
-            created_at=row[7],
+            project_id=row[1],
+            raw_text=row[2],
+            cleaned_text=row[3],
+            category=row[4],
+            date=row[5],
+            timestamp=row[6],
+            approval_status=row[7],
+            created_at=row[8],
         )
 
 
@@ -97,18 +133,31 @@ class LogEntry:
 
 
 # Database schemas
+PROJECTS_TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_name ON projects(name);
+"""
+
 NOTES_TABLE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
     raw_text TEXT NOT NULL,
     cleaned_text TEXT,
     category TEXT,
     date TEXT,
     timestamp TEXT,
     approval_status TEXT CHECK(approval_status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_project_id ON notes(project_id);
 CREATE INDEX IF NOT EXISTS idx_date ON notes(date);
 CREATE INDEX IF NOT EXISTS idx_category ON notes(category);
 CREATE INDEX IF NOT EXISTS idx_approval_status ON notes(approval_status);

@@ -58,14 +58,31 @@ class XAIClient:
 1. Clean the provided raw notes for grammar, structure, and clarity
 2. Categorize each note under ONE of the predefined categories
 3. Preserve the original meaning and technical details
-4. Return valid JSON format
+4. Format the cleaned text with proper bullet points and structure
+5. Return valid JSON format
 
 Predefined categories: {categories_str}
+
+FORMATTING REQUIREMENTS:
+- Organize information into clear bullet points using "•" or "-"
+- Group related information under topic headings when appropriate
+- Maintain proper indentation for sub-points (use 2-4 spaces)
+- Keep bullets aligned and readable
+- Use line breaks between different topics or sections
+- Avoid creating walls of text - break content into digestible chunks
+
+Example of good formatting:
+"• Main topic 1
+  - Sub-point with details
+  - Another sub-point
+• Main topic 2
+  - Related detail
+  - Additional information"
 
 Return format (JSON array):
 [
   {{
-    "cleaned_text": "Cleaned and formatted note text",
+    "cleaned_text": "Properly formatted note with bullet points and structure",
     "category": "Category Name",
     "date": "{datetime.now().strftime('%Y-%m-%d')}",
     "timestamp": "{datetime.now().strftime('%H:%M:%S')}"

@@ -12,7 +12,7 @@ from utils.logger import logger, log_user_action, log_api_call
 
 
 def render_input_view(
-    xai_client: Optional[XAIClient], db_manager: DatabaseManager, username: str
+    xai_client: Optional[XAIClient], db_manager: DatabaseManager, username: str, project_id: int
 ):
     """
     Render the note input view.
@@ -21,6 +21,7 @@ def render_input_view(
         xai_client: xAI API client instance
         db_manager: Database manager instance
         username: Current username
+        project_id: Current project ID
     """
     st.header("📝 Create New Note")
     st.markdown("Enter your project notes below. They will be cleaned and categorized automatically.")
@@ -58,14 +59,14 @@ def render_input_view(
 
         # Process with API if available
         if xai_client:
-            process_with_api(xai_client, db_manager, raw_notes, username)
+            process_with_api(xai_client, db_manager, raw_notes, username, project_id)
         else:
             # Manual entry without API
-            save_manual_note(db_manager, raw_notes, username)
+            save_manual_note(db_manager, raw_notes, username, project_id)
 
 
 def process_with_api(
-    xai_client: XAIClient, db_manager: DatabaseManager, raw_notes: str, username: str
+    xai_client: XAIClient, db_manager: DatabaseManager, raw_notes: str, username: str, project_id: int
 ):
     """
     Process notes through the API.
@@ -75,6 +76,7 @@ def process_with_api(
         db_manager: Database manager
         raw_notes: Raw note text
         username: Current username
+        project_id: Current project ID
     """
     with st.spinner("🤖 Processing notes with AI..."):
         start_time = datetime.now()
@@ -93,6 +95,7 @@ def process_with_api(
                 try:
                     note_id = db_manager.insert_note(
                         raw_text=raw_notes,
+                        project_id=project_id,
                         cleaned_text=note["cleaned_text"],
                         category=note["category"],
                         date=note["date"],
@@ -130,10 +133,10 @@ def process_with_api(
             # Offer manual entry as fallback
             st.info("💡 You can manually enter notes without API processing using the manual entry option below.")
             if st.button("Save as Manual Note"):
-                save_manual_note(db_manager, raw_notes, username)
+                save_manual_note(db_manager, raw_notes, username, project_id)
 
 
-def save_manual_note(db_manager: DatabaseManager, raw_notes: str, username: str):
+def save_manual_note(db_manager: DatabaseManager, raw_notes: str, username: str, project_id: int):
     """
     Save a note manually without API processing.
 
@@ -141,6 +144,7 @@ def save_manual_note(db_manager: DatabaseManager, raw_notes: str, username: str)
         db_manager: Database manager
         raw_notes: Raw note text
         username: Current username
+        project_id: Current project ID
     """
     try:
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -148,6 +152,7 @@ def save_manual_note(db_manager: DatabaseManager, raw_notes: str, username: str)
 
         note_id = db_manager.insert_note(
             raw_text=raw_notes,
+            project_id=project_id,
             cleaned_text=raw_notes,  # Use raw text as cleaned text
             category="General",  # Default category
             date=current_date,

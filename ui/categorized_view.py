@@ -12,12 +12,13 @@ from config.settings import NOTES_PER_PAGE
 from utils.logger import logger
 
 
-def render_categorized_view(db_manager: DatabaseManager):
+def render_categorized_view(db_manager: DatabaseManager, project_id: int):
     """
     Render the categorized view.
 
     Args:
         db_manager: Database manager instance
+        project_id: Current project ID
     """
     st.header("🗂️ View by Category")
     st.markdown("Browse notes organized by project categories.")
@@ -70,6 +71,7 @@ def render_categorized_view(db_manager: DatabaseManager):
             page=st.session_state.cat_page,
             per_page=NOTES_PER_PAGE,
             approval_status="approved",
+            project_id=project_id,
             date_from=date_from_str,
             date_to=date_to_str,
             category=category_filter,

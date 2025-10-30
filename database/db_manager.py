@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from config.settings import DATABASE_PATH, BACKUP_DIR
-from database.models import Note, LogEntry, NOTES_TABLE_SCHEMA, LOGS_TABLE_SCHEMA
+from database.models import Note, Project, LogEntry, NOTES_TABLE_SCHEMA, PROJECTS_TABLE_SCHEMA, LOGS_TABLE_SCHEMA
+from utils.logger import logger
 
 
 class DatabaseManager:
@@ -30,6 +31,37 @@ class DatabaseManager:
         """Create tables if they don't exist."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+
+            # Create projects table first
+            cursor.executescript(PROJECTS_TABLE_SCHEMA)
+
+            # Check if notes table exists and needs migration
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='notes'"
+            )
+            notes_table_exists = cursor.fetchone() is not None
+
+            if notes_table_exists:
+                # Check if project_id column exists
+                cursor.execute("PRAGMA table_info(notes)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'project_id' not in columns:
+                    # Migrate existing notes table
+                    cursor.execute("ALTER TABLE notes ADD COLUMN project_id INTEGER")
+
+                    # Create a default project for migration
+                    cursor.execute("SELECT id FROM projects WHERE name = 'Default Project'")
+                    default_project = cursor.fetchone()
+                    if not default_project:
+                        cursor.execute("INSERT INTO projects (name) VALUES ('Default Project')")
+                        default_project_id = cursor.lastrowid
+                    else:
+                        default_project_id = default_project[0]
+
+                    # Assign all existing notes to the default project
+                    cursor.execute("UPDATE notes SET project_id = ? WHERE project_id IS NULL", (default_project_id,))
+                    logger.info(f"Migrated existing notes to Default Project (ID: {default_project_id})")
+
             cursor.executescript(NOTES_TABLE_SCHEMA)
             cursor.executescript(LOGS_TABLE_SCHEMA)
             conn.commit()
@@ -46,11 +78,97 @@ class DatabaseManager:
         shutil.copy2(self.db_path, backup_path)
         return backup_path
 
+    # ============ Project Operations ============
+
+    def create_project(self, name: str) -> int:
+        """
+        Create a new project.
+
+        Args:
+            name: Project name
+
+        Returns:
+            ID of created project
+
+        Raises:
+            sqlite3.IntegrityError: If project name already exists
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO projects (name) VALUES (?)",
+                (name,),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_project_by_id(self, project_id: int) -> Optional[Project]:
+        """
+        Retrieve a project by ID.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            Project instance or None
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
+            row = cursor.fetchone()
+            return Project.from_db_row(row) if row else None
+
+    def get_project_by_name(self, name: str) -> Optional[Project]:
+        """
+        Retrieve a project by name.
+
+        Args:
+            name: Project name
+
+        Returns:
+            Project instance or None
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM projects WHERE name = ?", (name,))
+            row = cursor.fetchone()
+            return Project.from_db_row(row) if row else None
+
+    def get_all_projects(self) -> List[Project]:
+        """
+        Get all projects ordered by creation date.
+
+        Returns:
+            List of Project instances
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM projects ORDER BY created_at ASC")
+            rows = cursor.fetchall()
+            return [Project.from_db_row(row) for row in rows]
+
+    def delete_project(self, project_id: int) -> bool:
+        """
+        Delete a project and all its notes (CASCADE).
+
+        Args:
+            project_id: ID of project to delete
+
+        Returns:
+            True if deleted, False if not found
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
     # ============ Note Operations ============
 
     def insert_note(
         self,
         raw_text: str,
+        project_id: int,
         cleaned_text: Optional[str] = None,
         category: Optional[str] = None,
         date: Optional[str] = None,
@@ -62,6 +180,7 @@ class DatabaseManager:
 
         Args:
             raw_text: Original user input
+            project_id: Associated project ID
             cleaned_text: GPT-processed text
             category: Assigned category
             date: Note date (YYYY-MM-DD)
@@ -75,10 +194,10 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO notes (raw_text, cleaned_text, category, date, timestamp, approval_status)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO notes (raw_text, project_id, cleaned_text, category, date, timestamp, approval_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (raw_text, cleaned_text, category, date, timestamp, approval_status),
+                (raw_text, project_id, cleaned_text, category, date, timestamp, approval_status),
             )
             conn.commit()
             return cursor.lastrowid
@@ -148,6 +267,7 @@ class DatabaseManager:
         page: int = 1,
         per_page: int = 50,
         approval_status: str = "approved",
+        project_id: Optional[int] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         category: Optional[str] = None,
@@ -159,6 +279,7 @@ class DatabaseManager:
             page: Page number (1-indexed)
             per_page: Notes per page
             approval_status: Filter by approval status
+            project_id: Filter by project ID
             date_from: Filter by start date (YYYY-MM-DD)
             date_to: Filter by end date (YYYY-MM-DD)
             category: Filter by category
@@ -170,6 +291,9 @@ class DatabaseManager:
         where_clauses = ["approval_status = ?"]
         params = [approval_status]
 
+        if project_id:
+            where_clauses.append("project_id = ?")
+            params.append(project_id)
         if date_from:
             where_clauses.append("date >= ?")
             params.append(date_from)
@@ -205,7 +329,7 @@ class DatabaseManager:
             return notes, total_count
 
     def get_notes_by_category(
-        self, category: str, approval_status: str = "approved"
+        self, category: str, approval_status: str = "approved", project_id: Optional[int] = None
     ) -> List[Note]:
         """
         Get all notes for a specific category.
@@ -213,25 +337,37 @@ class DatabaseManager:
         Args:
             category: Category name
             approval_status: Filter by approval status
+            project_id: Filter by project ID
 
         Returns:
             List of Note instances
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT * FROM notes
-                WHERE category = ? AND approval_status = ?
-                ORDER BY date DESC, timestamp DESC
-                """,
-                (category, approval_status),
-            )
+
+            if project_id:
+                cursor.execute(
+                    """
+                    SELECT * FROM notes
+                    WHERE category = ? AND approval_status = ? AND project_id = ?
+                    ORDER BY date DESC, timestamp DESC
+                    """,
+                    (category, approval_status, project_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM notes
+                    WHERE category = ? AND approval_status = ?
+                    ORDER BY date DESC, timestamp DESC
+                    """,
+                    (category, approval_status),
+                )
             rows = cursor.fetchall()
             return [Note.from_db_row(row) for row in rows]
 
     def get_pending_notes(
-        self, page: Optional[int] = None, per_page: int = 50
+        self, page: Optional[int] = None, per_page: int = 50, project_id: Optional[int] = None
     ) -> Tuple[List[Note], int]:
         """
         Get pending notes awaiting approval.
@@ -239,6 +375,7 @@ class DatabaseManager:
         Args:
             page: Page number (1-indexed), None for all notes
             per_page: Notes per page (only used if page is provided)
+            project_id: Filter by project ID
 
         Returns:
             Tuple of (list of Note instances, total count)
@@ -246,25 +383,30 @@ class DatabaseManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
 
+            # Build where clause
+            where_clause = "approval_status = 'pending'"
+            params = []
+            if project_id:
+                where_clause += " AND project_id = ?"
+                params.append(project_id)
+
             # Get total count
-            cursor.execute(
-                "SELECT COUNT(*) FROM notes WHERE approval_status = 'pending'"
-            )
+            cursor.execute(f"SELECT COUNT(*) FROM notes WHERE {where_clause}", params)
             total_count = cursor.fetchone()[0]
 
             # Build query with optional pagination
-            query = """
+            query = f"""
                 SELECT * FROM notes
-                WHERE approval_status = 'pending'
+                WHERE {where_clause}
                 ORDER BY created_at DESC
             """
 
             if page is not None:
                 offset = (page - 1) * per_page
                 query += " LIMIT ? OFFSET ?"
-                cursor.execute(query, (per_page, offset))
+                cursor.execute(query, params + [per_page, offset])
             else:
-                cursor.execute(query)
+                cursor.execute(query, params)
 
             rows = cursor.fetchall()
             notes = [Note.from_db_row(row) for row in rows]
@@ -358,9 +500,12 @@ class DatabaseManager:
 
     # ============ Statistics ============
 
-    def get_statistics(self) -> dict:
+    def get_statistics(self, project_id: Optional[int] = None) -> dict:
         """
         Get database statistics.
+
+        Args:
+            project_id: Filter by project ID
 
         Returns:
             Dictionary with statistics
@@ -371,31 +516,59 @@ class DatabaseManager:
             stats = {}
 
             # Total notes by status
-            cursor.execute(
-                "SELECT approval_status, COUNT(*) FROM notes GROUP BY approval_status"
-            )
+            if project_id:
+                cursor.execute(
+                    "SELECT approval_status, COUNT(*) FROM notes WHERE project_id = ? GROUP BY approval_status",
+                    (project_id,)
+                )
+            else:
+                cursor.execute(
+                    "SELECT approval_status, COUNT(*) FROM notes GROUP BY approval_status"
+                )
             stats["by_status"] = dict(cursor.fetchall())
 
             # Total notes by category
-            cursor.execute(
-                """
-                SELECT category, COUNT(*) FROM notes
-                WHERE approval_status = 'approved'
-                GROUP BY category
-                """
-            )
+            if project_id:
+                cursor.execute(
+                    """
+                    SELECT category, COUNT(*) FROM notes
+                    WHERE approval_status = 'approved' AND project_id = ?
+                    GROUP BY category
+                    """,
+                    (project_id,)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT category, COUNT(*) FROM notes
+                    WHERE approval_status = 'approved'
+                    GROUP BY category
+                    """
+                )
             stats["by_category"] = dict(cursor.fetchall())
 
             # Notes per day (last 30 days)
-            cursor.execute(
-                """
-                SELECT date, COUNT(*) FROM notes
-                WHERE approval_status = 'approved'
-                AND date >= date('now', '-30 days')
-                GROUP BY date
-                ORDER BY date DESC
-                """
-            )
+            if project_id:
+                cursor.execute(
+                    """
+                    SELECT date, COUNT(*) FROM notes
+                    WHERE approval_status = 'approved' AND project_id = ?
+                    AND date >= date('now', '-30 days')
+                    GROUP BY date
+                    ORDER BY date DESC
+                    """,
+                    (project_id,)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT date, COUNT(*) FROM notes
+                    WHERE approval_status = 'approved'
+                    AND date >= date('now', '-30 days')
+                    GROUP BY date
+                    ORDER BY date DESC
+                    """
+                )
             stats["notes_per_day"] = dict(cursor.fetchall())
 
             return stats

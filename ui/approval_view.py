@@ -11,13 +11,14 @@ from config.settings import NOTES_PER_PAGE
 from utils.logger import logger, log_user_action
 
 
-def render_approval_view(db_manager: DatabaseManager, username: str):
+def render_approval_view(db_manager: DatabaseManager, username: str, project_id: int):
     """
     Render the note approval view.
 
     Args:
         db_manager: Database manager instance
         username: Current username
+        project_id: Current project ID
     """
     st.header("✅ Approve Notes")
     st.markdown("Review notes processed by AI and approve, edit, or reject them.")
@@ -31,6 +32,7 @@ def render_approval_view(db_manager: DatabaseManager, username: str):
         pending_notes, total_count = db_manager.get_pending_notes(
             page=st.session_state.approval_page,
             per_page=NOTES_PER_PAGE,
+            project_id=project_id,
         )
 
         if total_count == 0:

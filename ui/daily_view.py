@@ -10,12 +10,13 @@ from config.settings import NOTES_PER_PAGE
 from utils.logger import logger
 
 
-def render_daily_view(db_manager: DatabaseManager):
+def render_daily_view(db_manager: DatabaseManager, project_id: int):
     """
     Render the daily chronological view.
 
     Args:
         db_manager: Database manager instance
+        project_id: Current project ID
     """
     st.header("📅 Daily View")
     st.markdown("View all approved notes in chronological order by date.")
@@ -57,6 +58,7 @@ def render_daily_view(db_manager: DatabaseManager):
             page=st.session_state.daily_page,
             per_page=NOTES_PER_PAGE,
             approval_status="approved",
+            project_id=project_id,
             date_from=date_from_str,
             date_to=date_to_str,
         )
