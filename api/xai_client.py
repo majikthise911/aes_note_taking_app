@@ -115,11 +115,60 @@ CLARIFYING QUESTIONS:
 - Format: "This note mentions [X] and [Y]. Which aspect is more important: A) [X focus] B) [Y focus]?"
 - Keep questions concise and actionable
 
+CRITICAL: When to Create Multiple Notes vs Keep as One
+
+GUIDING PRINCIPLE: Notes from the same meeting/call/discussion should stay together, even if they cover multiple technical topics.
+
+KEEP AS ONE NOTE when:
+- All information is from the same meeting/call/discussion
+- Multiple bullet points about related work (even across different technical areas)
+- Context from one date/timeframe with various updates
+- A collection of updates that naturally go together
+- Date-stamped observations that share context
+
+Example 1 - KEEP AS ONE NOTE:
+"2025-08-06 Morning Call - Primoris Review:
+• Pricing: 61.2 cents/W competitive with internal 73.4 cents/W
+• Schedule: Need to schedule internal estimating call on Redonda
+• Technical: Construction spares at 0.4%, module washing excluded
+• Follow-up: Verify geotech data, add contingency if needed"
+→ ONE NOTE (one meeting, multiple topics)
+Category: Choose the PRIMARY focus (probably "Pricing" or "General")
+
+Example 2 - KEEP AS ONE NOTE:
+"Met with vendor about project status. Discussed pricing at 61.2 cents/W. Reviewed structural design concerns. Budget approved pending engineering review. AES to follow up on drawings by Friday."
+→ ONE NOTE (single meeting with multiple agenda items)
+
+Example 3 - TWO NOTES (different contexts):
+"Morning meeting: Budget approved at 61.2 cents/W. AES to schedule follow-up.
+
+---
+
+Afternoon call with engineering: Structural design needs major revision. PRE to provide updated drawings."
+→ TWO NOTES (different meetings/calls)
+
+ONLY SPLIT INTO MULTIPLE NOTES when:
+- Clearly different meetings/calls/discussions
+- Explicit separators: "---", "Later that day:", "Afternoon meeting:", etc.
+- Notes from obviously different dates/contexts
+- User explicitly indicates separation with line breaks + context change
+
+NEVER SPLIT:
+- Individual bullet points from same context
+- Sentences within same paragraph
+- Related updates from same source/time
+
+CATEGORIZATION with Multiple Topics:
+- Choose the PRIMARY/DOMINANT category
+- If a meeting covers budget (60%) and schedule (40%), choose "Pricing"
+- Don't create separate notes just because multiple categories mentioned
+- Use best judgment for the MAIN focus
+
 Return format (JSON array):
 [
   {{
     "cleaned_text": "Properly formatted note with bullet points and structure",
-    "category": "Category Name",
+    "category": "Primary Category Name",
     "confidence_score": 0.85,
     "clarifying_question": "Optional question if confidence < 0.8, otherwise null",
     "date": "{datetime.now().strftime('%Y-%m-%d')}",
@@ -127,7 +176,8 @@ Return format (JSON array):
   }}
 ]
 
-If multiple distinct notes are provided, return multiple JSON objects in the array.
+Default to FEWER, MORE COMPREHENSIVE notes rather than many small fragments.
+Prefer 1-3 notes per user submission, not 10-20 fragments.
 """
         return system_message
 
