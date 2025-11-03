@@ -158,8 +158,13 @@ def render_grouped_view(notes: list, db_manager: DatabaseManager):
                 col1, col2, col3 = st.columns([6, 1, 1])
 
                 with col1:
-                    st.markdown(f"**{note.date} {note.timestamp}**")
-                    st.write(note.cleaned_text)
+                    date_str = note.date or 'N/A'
+                    timestamp_str = note.timestamp or ''
+                    if timestamp_str:
+                        st.markdown(f"**{date_str} {timestamp_str}**")
+                    else:
+                        st.markdown(f"**{date_str}**")
+                    st.markdown(note.cleaned_text)
                     st.caption(f"Note ID: {note.id}")
 
                 with col2:
@@ -481,7 +486,14 @@ def generate_category_markdown_export(notes: list, category_filter: str) -> str:
         markdown += f"*{len(cat_notes)} notes*\n\n"
 
         for note in cat_notes:
-            markdown += f"**{note.date} {note.timestamp}**\n\n"
+            # Build date/time header properly
+            date_str = note.date or 'N/A'
+            timestamp_str = note.timestamp or ''
+            if timestamp_str:
+                markdown += f"**{date_str} {timestamp_str.strip()}**\n\n"
+            else:
+                markdown += f"**{date_str}**\n\n"
+
             markdown += f"{note.cleaned_text}\n\n"
             markdown += "---\n\n"
 

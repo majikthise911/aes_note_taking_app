@@ -126,7 +126,9 @@ def render_notes_list(notes: list, db_manager: DatabaseManager):
                 col1, col2, col3 = st.columns([6, 1, 1])
 
                 with col1:
-                    st.markdown(f"**{note.timestamp or 'N/A'}** - {note.cleaned_text}")
+                    timestamp_str = note.timestamp or 'N/A'
+                    st.markdown(f"**{timestamp_str}**")
+                    st.markdown(note.cleaned_text)
                     st.caption(f"Category: {note.category} | ID: {note.id}")
 
                 with col2:
@@ -279,7 +281,8 @@ def generate_daily_markdown_export(notes: list, date_from: str, date_to: str) ->
         markdown += f"*{len(date_notes)} notes*\n\n"
 
         for note in date_notes:
-            markdown += f"### {note.timestamp or 'N/A'}\n\n"
+            timestamp_str = (note.timestamp or 'N/A').strip()
+            markdown += f"### {timestamp_str}\n\n"
             markdown += f"**Category:** {note.category}\n\n"
             markdown += f"{note.cleaned_text}\n\n"
             markdown += "---\n\n"
