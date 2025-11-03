@@ -7,6 +7,7 @@ from typing import Optional
 
 from database.db_manager import DatabaseManager
 from config.settings import NOTES_PER_PAGE
+from config.categories import get_categories_list
 from utils.logger import logger
 
 
@@ -63,15 +64,36 @@ def render_daily_view(db_manager: DatabaseManager, project_id: int):
             date_to=date_to_str,
         )
 
-        # Display count
-        st.write(f"**Total notes:** {total_count}")
+        # Display count and export button
+        col_count, col_export = st.columns([3, 1])
+        with col_count:
+            st.write(f"**Total notes:** {total_count}")
+        with col_export:
+            if total_count > 0:
+                # Get all notes for export (not just current page)
+                all_notes, _ = db_manager.get_notes_paginated(
+                    page=1,
+                    per_page=10000,  # Large number to get all notes
+                    approval_status="approved",
+                    project_id=project_id,
+                    date_from=date_from_str,
+                    date_to=date_to_str,
+                )
+                markdown_export = generate_daily_markdown_export(all_notes, date_from_str, date_to_str)
+                st.download_button(
+                    label="📥 Export to Markdown",
+                    data=markdown_export,
+                    file_name=f"daily_notes_{date_from_str}_to_{date_to_str}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
 
         if total_count == 0:
             st.info("No approved notes found in the selected date range.")
             return
 
         # Display notes
-        render_notes_list(notes)
+        render_notes_list(notes, db_manager)
 
         # Pagination controls
         render_pagination(total_count, NOTES_PER_PAGE, "daily_page")
@@ -81,12 +103,13 @@ def render_daily_view(db_manager: DatabaseManager, project_id: int):
         logger.error(f"Daily view error: {e}", exc_info=True)
 
 
-def render_notes_list(notes: list):
+def render_notes_list(notes: list, db_manager: DatabaseManager):
     """
-    Render a list of notes.
+    Render a list of notes with edit and delete options.
 
     Args:
         notes: List of Note instances
+        db_manager: Database manager instance
     """
     # Group notes by date
     notes_by_date = {}
@@ -100,13 +123,29 @@ def render_notes_list(notes: list):
     for date, date_notes in notes_by_date.items():
         with st.expander(f"📅 **{date}** ({len(date_notes)} notes)", expanded=True):
             for note in date_notes:
-                col1, col2 = st.columns([4, 1])
+                col1, col2, col3 = st.columns([6, 1, 1])
 
                 with col1:
                     st.markdown(f"**{note.timestamp or 'N/A'}** - {note.cleaned_text}")
+                    st.caption(f"Category: {note.category} | ID: {note.id}")
 
                 with col2:
-                    st.caption(f"Category: {note.category}")
+                    if st.button("✏️ Edit", key=f"edit_daily_{note.id}", use_container_width=True):
+                        st.session_state[f"editing_note_{note.id}"] = True
+                        st.rerun()
+
+                with col3:
+                    if st.button("🗑️ Delete", key=f"delete_daily_{note.id}", use_container_width=True):
+                        if db_manager.delete_note(note.id):
+                            st.success(f"Deleted note {note.id}")
+                            logger.info(f"Deleted note {note.id} from daily view")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete note")
+
+                # Show edit form if editing
+                if st.session_state.get(f"editing_note_{note.id}", False):
+                    render_edit_form(note, db_manager)
 
                 st.markdown("---")
 
@@ -153,3 +192,96 @@ def render_pagination(total_count: int, per_page: int, session_key: str):
         if st.button("Last ⏭️", disabled=(current_page >= total_pages), key=f"{session_key}_last"):
             st.session_state[session_key] = total_pages
             st.rerun()
+
+
+def render_edit_form(note, db_manager: DatabaseManager):
+    """
+    Render an edit form for a note.
+
+    Args:
+        note: Note instance to edit
+        db_manager: Database manager instance
+    """
+    with st.form(key=f"edit_form_{note.id}"):
+        st.subheader(f"Edit Note #{note.id}")
+
+        # Edit fields
+        new_text = st.text_area(
+            "Note Text",
+            value=note.cleaned_text or note.raw_text,
+            height=100,
+            key=f"edit_text_{note.id}"
+        )
+
+        categories = get_categories_list()
+        current_category_index = categories.index(note.category) if note.category in categories else 0
+        new_category = st.selectbox(
+            "Category",
+            options=categories,
+            index=current_category_index,
+            key=f"edit_category_{note.id}"
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                if db_manager.update_note(
+                    note_id=note.id,
+                    cleaned_text=new_text,
+                    category=new_category
+                ):
+                    st.success("Note updated successfully!")
+                    logger.info(f"Updated note {note.id}")
+                    # Clear editing state
+                    del st.session_state[f"editing_note_{note.id}"]
+                    st.rerun()
+                else:
+                    st.error("Failed to update note")
+
+        with col2:
+            if st.form_submit_button("❌ Cancel", use_container_width=True):
+                # Clear editing state
+                del st.session_state[f"editing_note_{note.id}"]
+                st.rerun()
+
+
+def generate_daily_markdown_export(notes: list, date_from: str, date_to: str) -> str:
+    """
+    Generate markdown export of daily notes suitable for OneNote.
+
+    Args:
+        notes: List of Note instances
+        date_from: Start date string
+        date_to: End date string
+
+    Returns:
+        Markdown formatted string
+    """
+    # Header
+    markdown = f"# Daily Notes Export\n\n"
+    markdown += f"**Date Range:** {date_from} to {date_to}\n\n"
+    markdown += f"**Total Notes:** {len(notes)}\n\n"
+    markdown += f"**Exported:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    markdown += "---\n\n"
+
+    # Group notes by date
+    notes_by_date = {}
+    for note in notes:
+        date = note.date or "Unknown Date"
+        if date not in notes_by_date:
+            notes_by_date[date] = []
+        notes_by_date[date].append(note)
+
+    # Format notes by date
+    for date in sorted(notes_by_date.keys(), reverse=True):
+        date_notes = notes_by_date[date]
+        markdown += f"## {date}\n\n"
+        markdown += f"*{len(date_notes)} notes*\n\n"
+
+        for note in date_notes:
+            markdown += f"### {note.timestamp or 'N/A'}\n\n"
+            markdown += f"**Category:** {note.category}\n\n"
+            markdown += f"{note.cleaned_text}\n\n"
+            markdown += "---\n\n"
+
+    return markdown

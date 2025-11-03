@@ -103,9 +103,29 @@ def render_categorized_view(db_manager: DatabaseManager, project_id: int):
         )
 
         if view_type == "Grouped by Category":
-            render_grouped_view(notes)
+            # Add export button for grouped view
+            if st.button("📥 Export Grouped View to Markdown", use_container_width=False):
+                # Get all notes for export
+                all_notes, _ = db_manager.get_notes_paginated(
+                    page=1,
+                    per_page=10000,
+                    approval_status="approved",
+                    project_id=project_id,
+                    date_from=date_from_str,
+                    date_to=date_to_str,
+                    category=category_filter,
+                )
+                markdown_export = generate_category_markdown_export(all_notes, category_filter or "All Categories")
+                st.download_button(
+                    label="Download Markdown",
+                    data=markdown_export,
+                    file_name=f"notes_by_category_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                    mime="text/markdown",
+                )
+
+            render_grouped_view(notes, db_manager)
         else:
-            render_table_view(notes)
+            render_table_view(notes, db_manager)
 
         # Pagination controls
         render_pagination_controls(total_count, NOTES_PER_PAGE)
@@ -115,12 +135,13 @@ def render_categorized_view(db_manager: DatabaseManager, project_id: int):
         logger.error(f"Categorized view error: {e}", exc_info=True)
 
 
-def render_grouped_view(notes: list):
+def render_grouped_view(notes: list, db_manager: DatabaseManager):
     """
-    Render notes grouped by category.
+    Render notes grouped by category with edit and delete options.
 
     Args:
         notes: List of Note instances
+        db_manager: Database manager instance
     """
     # Group notes by category
     notes_by_category = {}
@@ -134,18 +155,41 @@ def render_grouped_view(notes: list):
     for category, cat_notes in sorted(notes_by_category.items()):
         with st.expander(f"📁 **{category}** ({len(cat_notes)} notes)", expanded=True):
             for note in cat_notes:
-                st.markdown(f"**{note.date} {note.timestamp}**")
-                st.write(note.cleaned_text)
-                st.caption(f"Note ID: {note.id}")
+                col1, col2, col3 = st.columns([6, 1, 1])
+
+                with col1:
+                    st.markdown(f"**{note.date} {note.timestamp}**")
+                    st.write(note.cleaned_text)
+                    st.caption(f"Note ID: {note.id}")
+
+                with col2:
+                    if st.button("✏️ Edit", key=f"edit_cat_{note.id}", use_container_width=True):
+                        st.session_state[f"editing_note_{note.id}"] = True
+                        st.rerun()
+
+                with col3:
+                    if st.button("🗑️ Delete", key=f"delete_cat_{note.id}", use_container_width=True):
+                        if db_manager.delete_note(note.id):
+                            st.success(f"Deleted note {note.id}")
+                            logger.info(f"Deleted note {note.id} from categorized view")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete note")
+
+                # Show edit form if editing
+                if st.session_state.get(f"editing_note_{note.id}", False):
+                    render_edit_form(note, db_manager)
+
                 st.markdown("---")
 
 
-def render_table_view(notes: list):
+def render_table_view(notes: list, db_manager: DatabaseManager):
     """
-    Render notes in a table format.
+    Render notes in a table format with edit and delete options.
 
     Args:
         notes: List of Note instances
+        db_manager: Database manager instance
     """
     # Convert notes to dataframe
     data = []
@@ -185,6 +229,41 @@ def render_table_view(notes: list):
             file_name=f"notes_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
+
+    st.markdown("---")
+    st.subheader("Edit/Delete Notes")
+
+    # Show edit/delete options for individual notes
+    note_ids = [note.id for note in notes]
+    selected_note_id = st.selectbox(
+        "Select a note to edit or delete:",
+        options=note_ids,
+        format_func=lambda id: f"Note #{id} - {next((n.cleaned_text[:50] + '...' if len(n.cleaned_text) > 50 else n.cleaned_text) for n in notes if n.id == id)}",
+        key="table_note_selector"
+    )
+
+    if selected_note_id:
+        selected_note = next((n for n in notes if n.id == selected_note_id), None)
+        if selected_note:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("✏️ Edit Selected Note", use_container_width=True):
+                    st.session_state[f"editing_note_{selected_note_id}"] = True
+                    st.rerun()
+
+            with col2:
+                if st.button("🗑️ Delete Selected Note", use_container_width=True, type="secondary"):
+                    if db_manager.delete_note(selected_note_id):
+                        st.success(f"Deleted note {selected_note_id}")
+                        logger.info(f"Deleted note {selected_note_id} from table view")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete note")
+
+            # Show edit form if editing
+            if st.session_state.get(f"editing_note_{selected_note_id}", False):
+                render_edit_form(selected_note, db_manager)
 
 
 def render_action_items_grouped_view(db_manager: DatabaseManager, project_id: int):
@@ -316,3 +395,94 @@ def render_pagination_controls(total_count: int, per_page: int):
         if st.button("Last ⏭️", disabled=(current_page >= total_pages), key="cat_last"):
             st.session_state.cat_page = total_pages
             st.rerun()
+
+
+def render_edit_form(note, db_manager: DatabaseManager):
+    """
+    Render an edit form for a note.
+
+    Args:
+        note: Note instance to edit
+        db_manager: Database manager instance
+    """
+    with st.form(key=f"edit_form_cat_{note.id}"):
+        st.subheader(f"Edit Note #{note.id}")
+
+        # Edit fields
+        new_text = st.text_area(
+            "Note Text",
+            value=note.cleaned_text or note.raw_text,
+            height=100,
+            key=f"edit_text_cat_{note.id}"
+        )
+
+        categories = get_categories_list()
+        current_category_index = categories.index(note.category) if note.category in categories else 0
+        new_category = st.selectbox(
+            "Category",
+            options=categories,
+            index=current_category_index,
+            key=f"edit_category_cat_{note.id}"
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                if db_manager.update_note(
+                    note_id=note.id,
+                    cleaned_text=new_text,
+                    category=new_category
+                ):
+                    st.success("Note updated successfully!")
+                    logger.info(f"Updated note {note.id}")
+                    # Clear editing state
+                    del st.session_state[f"editing_note_{note.id}"]
+                    st.rerun()
+                else:
+                    st.error("Failed to update note")
+
+        with col2:
+            if st.form_submit_button("❌ Cancel", use_container_width=True):
+                # Clear editing state
+                del st.session_state[f"editing_note_{note.id}"]
+                st.rerun()
+
+
+def generate_category_markdown_export(notes: list, category_filter: str) -> str:
+    """
+    Generate markdown export of notes grouped by category suitable for OneNote.
+
+    Args:
+        notes: List of Note instances
+        category_filter: Category filter applied
+
+    Returns:
+        Markdown formatted string
+    """
+    # Header
+    markdown = f"# Notes by Category Export\n\n"
+    markdown += f"**Category Filter:** {category_filter}\n\n"
+    markdown += f"**Total Notes:** {len(notes)}\n\n"
+    markdown += f"**Exported:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    markdown += "---\n\n"
+
+    # Group notes by category
+    notes_by_category = {}
+    for note in notes:
+        category = note.category or "Uncategorized"
+        if category not in notes_by_category:
+            notes_by_category[category] = []
+        notes_by_category[category].append(note)
+
+    # Format notes by category
+    for category in sorted(notes_by_category.keys()):
+        cat_notes = notes_by_category[category]
+        markdown += f"## {category}\n\n"
+        markdown += f"*{len(cat_notes)} notes*\n\n"
+
+        for note in cat_notes:
+            markdown += f"**{note.date} {note.timestamp}**\n\n"
+            markdown += f"{note.cleaned_text}\n\n"
+            markdown += "---\n\n"
+
+    return markdown
