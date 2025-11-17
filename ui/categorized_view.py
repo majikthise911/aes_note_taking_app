@@ -24,6 +24,14 @@ def render_categorized_view(db_manager: DatabaseManager, project_id: int):
     st.header("🗂️ View by Category")
     st.markdown("Browse notes organized by project categories.")
 
+    # Search bar
+    search_query = st.text_input(
+        "🔍 Search notes:",
+        placeholder="Search by keyword, phrase, or category...",
+        key="cat_search",
+        help="Search across note content and categories"
+    )
+
     # Special view toggle for action items
     show_action_items_grouped = st.toggle(
         "📋 Show Action Items Grouped by Technical Category",
@@ -74,22 +82,39 @@ def render_categorized_view(db_manager: DatabaseManager, project_id: int):
     if "cat_page" not in st.session_state:
         st.session_state.cat_page = 1
 
-    # Get notes based on filter
+    # Get notes based on filter (with search if query provided)
     try:
         category_filter = None if selected_category == "All Categories" else selected_category
 
-        notes, total_count = db_manager.get_notes_paginated(
-            page=st.session_state.cat_page,
-            per_page=NOTES_PER_PAGE,
-            approval_status="approved",
-            project_id=project_id,
-            date_from=date_from_str,
-            date_to=date_to_str,
-            category=category_filter,
-        )
+        if search_query and search_query.strip():
+            # Use search method
+            notes, total_count = db_manager.search_notes(
+                search_query=search_query.strip(),
+                page=st.session_state.cat_page,
+                per_page=NOTES_PER_PAGE,
+                approval_status="approved",
+                project_id=project_id,
+                date_from=date_from_str,
+                date_to=date_to_str,
+                category=category_filter,
+            )
+        else:
+            # Use regular pagination
+            notes, total_count = db_manager.get_notes_paginated(
+                page=st.session_state.cat_page,
+                per_page=NOTES_PER_PAGE,
+                approval_status="approved",
+                project_id=project_id,
+                date_from=date_from_str,
+                date_to=date_to_str,
+                category=category_filter,
+            )
 
         # Display count
-        st.write(f"**Total notes:** {total_count}")
+        if search_query and search_query.strip():
+            st.write(f"**Search results:** {total_count} notes matching '{search_query}'")
+        else:
+            st.write(f"**Total notes:** {total_count}")
 
         if total_count == 0:
             st.info("No approved notes found with the selected filters.")
@@ -106,15 +131,27 @@ def render_categorized_view(db_manager: DatabaseManager, project_id: int):
             # Add export button for grouped view
             if st.button("📥 Export Grouped View to Markdown", use_container_width=False):
                 # Get all notes for export
-                all_notes, _ = db_manager.get_notes_paginated(
-                    page=1,
-                    per_page=10000,
-                    approval_status="approved",
-                    project_id=project_id,
-                    date_from=date_from_str,
-                    date_to=date_to_str,
-                    category=category_filter,
-                )
+                if search_query and search_query.strip():
+                    all_notes, _ = db_manager.search_notes(
+                        search_query=search_query.strip(),
+                        page=1,
+                        per_page=10000,
+                        approval_status="approved",
+                        project_id=project_id,
+                        date_from=date_from_str,
+                        date_to=date_to_str,
+                        category=category_filter,
+                    )
+                else:
+                    all_notes, _ = db_manager.get_notes_paginated(
+                        page=1,
+                        per_page=10000,
+                        approval_status="approved",
+                        project_id=project_id,
+                        date_from=date_from_str,
+                        date_to=date_to_str,
+                        category=category_filter,
+                    )
                 markdown_export = generate_category_markdown_export(all_notes, category_filter or "All Categories")
                 st.download_button(
                     label="Download Markdown",

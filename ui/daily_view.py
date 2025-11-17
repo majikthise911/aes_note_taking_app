@@ -22,6 +22,14 @@ def render_daily_view(db_manager: DatabaseManager, project_id: int):
     st.header("📅 Daily View")
     st.markdown("View all approved notes in chronological order by date.")
 
+    # Search bar
+    search_query = st.text_input(
+        "🔍 Search notes:",
+        placeholder="Search by keyword, phrase, or category...",
+        key="daily_search",
+        help="Search across note content and categories"
+    )
+
     # Filters
     col1, col2, col3 = st.columns([2, 2, 1])
 
@@ -53,32 +61,59 @@ def render_daily_view(db_manager: DatabaseManager, project_id: int):
     if "daily_page" not in st.session_state:
         st.session_state.daily_page = 1
 
-    # Get notes
+    # Get notes (with search if query provided)
     try:
-        notes, total_count = db_manager.get_notes_paginated(
-            page=st.session_state.daily_page,
-            per_page=NOTES_PER_PAGE,
-            approval_status="approved",
-            project_id=project_id,
-            date_from=date_from_str,
-            date_to=date_to_str,
-        )
+        if search_query and search_query.strip():
+            # Use search method
+            notes, total_count = db_manager.search_notes(
+                search_query=search_query.strip(),
+                page=st.session_state.daily_page,
+                per_page=NOTES_PER_PAGE,
+                approval_status="approved",
+                project_id=project_id,
+                date_from=date_from_str,
+                date_to=date_to_str,
+            )
+        else:
+            # Use regular pagination
+            notes, total_count = db_manager.get_notes_paginated(
+                page=st.session_state.daily_page,
+                per_page=NOTES_PER_PAGE,
+                approval_status="approved",
+                project_id=project_id,
+                date_from=date_from_str,
+                date_to=date_to_str,
+            )
 
         # Display count and export button
         col_count, col_export = st.columns([3, 1])
         with col_count:
-            st.write(f"**Total notes:** {total_count}")
+            if search_query and search_query.strip():
+                st.write(f"**Search results:** {total_count} notes matching '{search_query}'")
+            else:
+                st.write(f"**Total notes:** {total_count}")
         with col_export:
             if total_count > 0:
                 # Get all notes for export (not just current page)
-                all_notes, _ = db_manager.get_notes_paginated(
-                    page=1,
-                    per_page=10000,  # Large number to get all notes
-                    approval_status="approved",
-                    project_id=project_id,
-                    date_from=date_from_str,
-                    date_to=date_to_str,
-                )
+                if search_query and search_query.strip():
+                    all_notes, _ = db_manager.search_notes(
+                        search_query=search_query.strip(),
+                        page=1,
+                        per_page=10000,
+                        approval_status="approved",
+                        project_id=project_id,
+                        date_from=date_from_str,
+                        date_to=date_to_str,
+                    )
+                else:
+                    all_notes, _ = db_manager.get_notes_paginated(
+                        page=1,
+                        per_page=10000,  # Large number to get all notes
+                        approval_status="approved",
+                        project_id=project_id,
+                        date_from=date_from_str,
+                        date_to=date_to_str,
+                    )
                 markdown_export = generate_daily_markdown_export(all_notes, date_from_str, date_to_str)
                 st.download_button(
                     label="📥 Export to Markdown",

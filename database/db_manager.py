@@ -515,6 +515,83 @@ class DatabaseManager:
             rows = cursor.fetchall()
             return [LogEntry.from_db_row(row) for row in rows]
 
+    # ============ Search Operations ============
+
+    def search_notes(
+        self,
+        search_query: str,
+        project_id: Optional[int] = None,
+        approval_status: str = "approved",
+        page: int = 1,
+        per_page: int = 50,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> Tuple[List[Note], int]:
+        """
+        Search notes by text content.
+
+        Args:
+            search_query: Text to search for
+            project_id: Filter by project ID
+            approval_status: Filter by approval status
+            page: Page number (1-indexed)
+            per_page: Notes per page
+            date_from: Filter by start date (YYYY-MM-DD)
+            date_to: Filter by end date (YYYY-MM-DD)
+            category: Filter by category
+
+        Returns:
+            Tuple of (list of notes, total count)
+        """
+        offset = (page - 1) * per_page
+
+        # Build WHERE clause
+        where_clauses = ["approval_status = ?"]
+        params = [approval_status]
+
+        # Add search condition (search in both cleaned_text and raw_text)
+        where_clauses.append("(cleaned_text LIKE ? OR raw_text LIKE ? OR category LIKE ?)")
+        search_pattern = f"%{search_query}%"
+        params.extend([search_pattern, search_pattern, search_pattern])
+
+        if project_id:
+            where_clauses.append("project_id = ?")
+            params.append(project_id)
+        if date_from:
+            where_clauses.append("date >= ?")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("date <= ?")
+            params.append(date_to)
+        if category:
+            where_clauses.append("category = ?")
+            params.append(category)
+
+        where_sql = " AND ".join(where_clauses)
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            # Get total count
+            cursor.execute(f"SELECT COUNT(*) FROM notes WHERE {where_sql}", params)
+            total_count = cursor.fetchone()[0]
+
+            # Get paginated results
+            cursor.execute(
+                f"""
+                SELECT * FROM notes
+                WHERE {where_sql}
+                ORDER BY date DESC, timestamp DESC
+                LIMIT ? OFFSET ?
+                """,
+                params + [per_page, offset],
+            )
+            rows = cursor.fetchall()
+            notes = [Note.from_db_row(row) for row in rows]
+
+            return notes, total_count
+
     # ============ Statistics ============
 
     def get_statistics(self, project_id: Optional[int] = None) -> dict:
